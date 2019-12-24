@@ -1,2 +1,2 @@
 # Avrona
-for all Avrona projects
+for all scripts and data for Avrona projects
