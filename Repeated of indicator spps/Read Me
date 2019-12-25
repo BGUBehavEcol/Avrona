@@ -1,1 +1,1 @@
-
+About the sample data provided - Indicator species is an Excel file, in which we have the data in three tables that need to be exported to csv, or copied to clipboard to enter to the actual script.  The data is coming from the data available then, and is provided in wide format. The notebook has a section to convert to long format. The long format for doriae is provided too, so no need to produce it from the excel file.
