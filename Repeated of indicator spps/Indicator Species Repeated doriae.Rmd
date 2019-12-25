@@ -1,0 +1,432 @@
+---
+title: "Indicator Species Repeated"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+Based on the notebook I wrote for Rotem project.
+
+If the data is not in long format start from here
+```{r}
+rm(list=ls()) # if need to start from scratch
+
+library(tidyr)
+library(reshape2)
+ 
+  
+
+data_wide <-as.data.frame(read.csv(file="IndicatorSpecies3.csv"))
+head(data_wide)
+data <- melt(data_wide, id='plots')  # 1st stage of becoming long
+View(data)
+class(data)
+
+data_long <- data %>%  #It means - the following is done on the file data
+separate(variable, into = c("year", "month"), sep = "\\.")  # 2nd stage, split the year and month
+
+names(data_long)[4]<-"abundance" # rename the new col to the new name   dat$n
+View(data_long)
+
+## You should end up with a file for each species, with the exact same columns, just different number of lizards
+
+#write.csv(data_long, file = "A.opheodurus.csv")
+#write.csv(data_long, file = "S.doriae.csv")
+write.csv(data_long, file = "S.sthenodactylus.csv")
+
+```
+
+!!!!! Now need to go to the saved file and add the standard columns, as in previous analyses
+
+once the data is in long format- you can move on
+The W at the end of the file stands for weighted, as this is the data file that has been weighted by number of surveyors - whenever 1 instead of 2 - results were multiplied by 2.
+
+```{r}
+dat=as.data.frame(read.csv(file="S.doriae.csv"))
+dat <- dat[,1:6]
+
+```
+
+
+
+Now we can check normality assumptions. Start with visual inspection. Large deviations from the line, meaning not normal distribution. 
+
+```{r}
+
+# Visual inspection:
+qqnorm(dat$Lizards)
+qqline(dat$Lizards)
+
+
+# To confirm our suspicions from visual inspection, we do a formal test
+
+shapiro.test(dat$Lizards)
+
+library(nortest)
+lillie.test(dat$Lizards)
+
+# If the p-value > 0.05, it is implying that the distribution of the data are not significantly different from normal distribution. In other words, we can assume the normality.
+```
+
+We see from the QQ plot and from the two tests that the data of lizards is very far from normality, thus we will analyze in non-parametric repeated measures ANOVA.
+But because it cannot handle 3 within, we will remove the col. of year, thus keeping the months, but without lookng at differences between years.
+we also need to average the two years, as it cannot handle 128 rows, when the number of combinations is 64. Used the apply in a two col. dataframe to calculate the averages below.
+
+
+```{r}
+dat16 <- subset(dat, Year==2016)
+dat17<- subset(dat, Year==2017)
+dat18 <- subset(dat, Year==2018)
+JustLizards <- cbind(dat16$Lizards, dat17$Lizards, dat17$Lizards)
+LizardsAVG <- apply(JustLizards,1,mean) 
+datAVG <- cbind(dat16[,1:2],dat16[,4:5], LizardsAVG) # now we want to include the average as if it was the lizard number. We don't need the year, so we skip col. 3. We took dat16 as template, but each one would be the same.
+View(dat)
+
+```
+
+
+```{r}
+library(nparLD)
+
+attach(datAVG)  # tells it which data set to use
+length(datAVG$Plot)
+ex.f1f2<-f1.ld.f2(y=LizardsAVG, time1=Month, group=Oil, time2=Treatment,   subject=Plot, time1.name="Month", group.name="Oil",
+                   time2.name="Treatment",description=FALSE, time1.order=c(4,5,8,9),
+                  group.order=c("new","old"), time2.order=c("T","C"))
+
+ex.f1f2$ANOVA.test # automatically draws a plot of the main interaction, and a table of p values
+
+
+```
+
+Another version, from the article, but does the same, so can ignore.
+```{r}
+ex.f1f2np <- nparLD(LizardsAVG  ~ Oil  * Month* Treatment, data = datAVG,
+ subject = "Plot", description = FALSE)
+#plot(ex.f1f2np)
+SummaryRanks <- summary(ex.f1f2np)
+SummaryRanks
+#print(ex.f1f2np)
+                                                                                      
+# write(SummaryRanks, file = "SummaryRanks.txt") # Write the list in a CSV file whose name is specified
+# doesn't work, because it is not a table. So copy paste to a word or .txt file...
+```
+
+
+Now we will redo this, but showing only the years, and not the months (because we cannot analyze with three within with this package)
+1. on 2016 - avearge the months
+2. on 2017 - the same
+3. on 2018 - the same
+3. Combine the two again
+
+```{r}
+dat4 <- subset(dat16, Month==4)
+dat5<- subset(dat16, Month==5)
+dat8 <- subset(dat16, Month==8)
+dat9<- subset(dat16, Month==9)
+Lizards16 <- cbind(dat4$Lizards, dat5$Lizards,dat8$Lizards, dat9$Lizards) # average per year
+Lizards16AVG <- apply(Lizards16,1,mean) # calculate the mean of the 4 months in each row
+
+dat16AVG <- cbind(dat4[,1:3],dat4[,5], Lizards16AVG)  # combine for the 2016 dataset
+
+# Now the same with 2017
+
+dat4 <- subset(dat17, Month==4)
+dat5<- subset(dat17, Month==5)
+dat8 <- subset(dat17, Month==8)
+dat9<- subset(dat17, Month==9)
+Lizards17 <- cbind(dat4$Lizards, dat5$Lizards,dat8$Lizards, dat9$Lizards) # average per year
+Lizards17AVG <- apply(Lizards17,1,mean)
+dat17AVG <- cbind(dat4[,1:3],dat4[,5], Lizards17AVG)
+
+# Now the same with 2018
+
+dat4 <- subset(dat18, Month==4)
+dat5<- subset(dat18, Month==5)
+dat8 <- subset(dat18, Month==8)
+dat9<- subset(dat18, Month==9)
+Lizards18 <- cbind(dat4$Lizards, dat5$Lizards,dat8$Lizards, dat9$Lizards) # average per year
+Lizards18AVG <- apply(Lizards18,1,mean)
+dat18AVG <- cbind(dat4[,1:3],dat4[,5], Lizards18AVG)
+
+# Now need to make sure the Lizard col. has the same name in both dataframes to be able to rbind them below
+names(dat16AVG)[names(dat16AVG)=="Lizards16AVG"] <- "LizardsAVG"
+names(dat17AVG)[names(dat17AVG)=="Lizards17AVG"] <- "LizardsAVG"
+names(dat18AVG)[names(dat18AVG)=="Lizards18AVG"] <- "LizardsAVG"
+
+datYearsAVG<- rbind(dat16AVG,dat17AVG,dat18AVG )
+
+# now need to change the name of the 4th column, that somehow was changed during the cbind to "dat4[,5]", back to Treatment
+
+names(datYearsAVG)[4] <- "Treatment"
+View(datYearsAVG)
+```
+
+
+Now we can do the Repeated Measures to compare the means of the Years, without the Months
+
+```{r}
+rm(LizardsAVG, Year, Oil, Treatment, Plot)  # need to clear these, otherwise it seems to take some of the old ones, from the previous analysis, and then complains the lengths are different
+attach(datYearsAVG)  # tells it which data set to use
+ex.f1f2<-f1.ld.f2(y=LizardsAVG, time1=Year, group=Oil, time2=Treatment,   subject=Plot, time1.name="Year", group.name="Oil",
+                   time2.name="Treatment",description=FALSE, time1.order=c(2016,2017,2018),
+                  group.order=c("new","old"), time2.order=c("T","C"))
+
+ex.f1f2$ANOVA.test # automatically draws a plot of the highest interaction (even if not significant, so ignore), and a table of p values
+```
+
+Finally we need to get the numbers of lizards in each type, in order to plot the results in a visible way. Could plot the ranks, which seems to create similar shape of plots, but # of lizards is more intuitive. Actually, need to call them # of observations...
+So will do this by calculating ezANOVA and ask for the means.
+Ignore the first part, because we know canot do the parametric ANOVA. But in chunks below they  calculate the means
+
+```{r}
+library(ez)
+
+dat=as.data.frame(read.csv(file="S.doriae.csv"))  # NEED TO MAKE SURE TAKING THE SAME SPECIES AS ABOVE
+dat <- dat[,1:6]
+
+ezPrecis(dat)  # if you look here - Year and Month are numeric, and should be factors, otherwise assumptions are not tested. So below we convert them to factors.
+
+dat[,"Year"] <- factor(dat[,"Year"])
+dat[,"Month"] <- factor(dat[,"Month"] )
+ezPrecis(dat) # check again that all is OK
+
+Regular_Anova <- ezANOVA(
+data=dat
+, dv=Lizards
+, wid=Plot
+, within = .(Year,Month,Treatment)
+, between = Oil
+)
+
+print(Regular_Anova)
+
+
+
+```
+Can see that the Sphericity Corrections make almost everything not significant. But remember the assumptions of normality were seriously violated, that's why we did the non-parametric.
+
+
+Calculate below means for the between factor - Oil (age) - remember it mixes treatment, so it is mostly habitat 
+```{r}
+Regular_Anova <- ezANOVA(
+data=dat
+, dv=Lizards
+, wid=Plot
+, between = .(Oil)
+)
+
+MeansYear <- ezStats(
+data=dat
+, dv=Lizards
+, wid=Plot
+, between = .(Oil)
+)
+
+MeansYear
+write.csv(MeansYear, file = "MeansOil.csv") # Write the dataframe in a CSV file whose name is specified
+```
+
+Calculate below means for the year 
+```{r}
+Regular_Anova <- ezANOVA(
+data=dat
+, dv=Lizards
+, wid=Plot
+, within = .(Year)
+)
+
+MeansYear <- ezStats(
+data=dat
+, dv=Lizards
+, wid=Plot
+, within = .(Year)
+)
+
+MeansYear
+write.csv(MeansYear, file = "MeansYear.csv") # Write the dataframe in a CSV file whose name is specified
+```
+
+Means for the months
+```{r}
+Regular_Anova <- ezANOVA(
+data=dat
+, dv=Lizards
+, wid=Plot
+, within = .(Month)
+)
+
+MeansMonths <- ezStats(
+data=dat
+, dv=Lizards
+, wid=Plot
+, within = .(Month)
+)
+MeansMonths
+write.csv(MeansMonths, file = "MeansMonths.csv") # Write the dataframe in a CSV file whose name is specified
+```
+for interaction oil*month
+```{r}
+Regular_Anova <- ezANOVA(
+data=dat
+, dv=Lizards
+, wid=Plot
+, within = .(Month)
+, between = Oil
+)
+
+MeansOil.Treatment <- ezStats(
+data=dat
+, dv=Lizards
+, wid=Plot
+, within = .(Month)
+, between = Oil
+)
+
+MeansOil.Treatment
+write.csv(MeansOil.Treatment, file = "MeansOil.Month.csv")
+```
+
+for interaction oil*Year
+```{r}
+Regular_Anova <- ezANOVA(
+data=dat
+, dv=Lizards
+, wid=Plot
+, within = .(Year)
+, between = Oil
+)
+
+MeansOil.Treatment <- ezStats(
+data=dat
+, dv=Lizards
+, wid=Plot
+, within = .(Year)
+, between = Oil
+)
+
+MeansOil.Treatment
+write.csv(MeansOil.Treatment, file = "MeansOil.Year.csv")
+```
+
+
+for interaction oil*treatment
+```{r}
+Regular_Anova <- ezANOVA(
+data=dat
+, dv=Lizards
+, wid=Plot
+, within = .(Treatment)
+, between = Oil
+)
+
+MeansOil.Treatment <- ezStats(
+data=dat
+, dv=Lizards
+, wid=Plot
+, within = .(Treatment)
+, between = Oil
+)
+
+MeansOil.Treatment
+write.csv(MeansOil.Treatment, file = "MeansOil.Treatment.csv")
+```
+
+for interactions year*treatment
+```{r}
+Regular_Anova <- ezANOVA(
+data=dat
+, dv=Lizards
+, wid=Plot
+, within = .(Year,Treatment)
+, between = NULL
+)
+
+MeansYear.Treatment <- ezStats(
+data=dat
+, dv=Lizards
+, wid=Plot
+, within = .(Year,Treatment)
+, between = NULL
+)
+MeansYear.Treatment
+write.csv(MeansYear.Treatment, file = "MeansYear.Treatment.csv")
+```
+
+Now three way interactions, like the plots created by the non-parametric
+```{r}
+Regular_Anova <- ezANOVA(
+data=dat
+, dv=Lizards
+, wid=Plot
+, within = .(Year,Treatment)
+, between = Oil
+)
+
+MeansOil.Year.Treatment <- ezStats(
+data=dat
+, dv=Lizards
+, wid=Plot
+, within = .(Year,Treatment)
+, between = Oil
+)
+MeansOil.Year.Treatment
+write.csv(MeansOil.Year.Treatment, file = "MeansOil.Year.Treatment.csv")
+
+
+```
+The other three way interactions
+
+```{r}
+Regular_Anova <- ezANOVA(
+data=dat
+, dv=Lizards
+, wid=Plot
+, within = .(Month,Treatment)
+, between = Oil
+)
+
+MeansOil.Month.Treatment <- ezStats(
+data=dat
+, dv=Lizards
+, wid=Plot
+, within = .(Month,Treatment)
+, between = Oil
+)
+MeansOil.Month.Treatment
+write.csv(MeansOil.Month.Treatment, file = "MeansOil.Month.Treatment.csv")
+
+
+```
+
+
+
+
+
+
+
+
+For comparison - the original data set in package
+
+```{r}
+data(ANT)
+head(ANT)
+ezPrecis(ANT)
+
+#Run an ANOVA on the mean correct RT data.
+rt_anova = ezANOVA(
+data = ANT[ANT$error==0,]
+, dv = rt
+, wid = subnum
+, within = .(cue,flank)
+, between = group
+)
+#Show the ANOVA and assumption tests.
+print(rt_anova)
+```
+
+
+
+
+
+
